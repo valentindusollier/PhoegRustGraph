@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <nauty/naututil.h>
 #include <nauty/nautinv.h>
+#include <nauty/naugroup.h>
 #include <nauty/nauty.h>
 
 typedef unsigned long long int ullong;
@@ -45,6 +46,31 @@ void nauty_wrapper(ullong n, ullong m, graph* g, int* lab, int* ptn, int* orbits
 void nauty_wrapper_directed(ullong n, ullong m, graph* g, int* lab, int* ptn, int* orbits) {
     static DEFAULTOPTIONS_DIGRAPH(options);
     _nauty_wrapper(n, m, g, lab, ptn, orbits, options);
+}
+
+void allgroup_wrapper(ullong n,
+                       ullong m, 
+                       graph *g, 
+                       int *lab, 
+                       int *ptn, 
+                       int *orbits,
+                       void (*action)(int *, int, int *, void *), 
+                       void *userptr)
+{
+    static DEFAULTOPTIONS_GRAPH(options);
+    statsblk stats;
+
+    options.userautomproc = groupautomproc;
+    options.userlevelproc = grouplevelproc;
+    options.getcanon = 0;
+    options.defaultptn = 1;
+
+    densenauty(g, lab, ptn, orbits, &options, &stats, m, n, NULL);
+
+    grouprec *group = groupptr(FALSE);
+    makecosetreps(group);
+
+    allgroup3(group, action, userptr);
 }
 
 int wordsize() { return WORDSIZE; }

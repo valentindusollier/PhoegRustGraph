@@ -28,6 +28,17 @@ extern "C" {
         ptn: *mut int,
         orbits: *mut int,
     );
+
+    fn allgroup_wrapper(
+        n: long,
+        m: long,
+        g: *const graph,
+        lab: *mut int,
+        ptn: *mut int,
+        orbits: *mut int,
+        action: extern "C" fn(*mut int, int, *mut int, *mut libc::c_void),
+        userptr: *mut libc::c_void,
+    );
 }
 
 fn init_fixed(n: u64, fixed: &[Vec<u64>]) -> (Vec<i32>, Vec<i32>) {
@@ -246,6 +257,65 @@ pub fn canon_transfo(g: &GraphTransformation) -> GraphTransformation {
     canon_transfo_with_fixed(g, &[])
 }
 
+// Given a non directed graph of order <= 255, returns its automorphism group.
+// Example:
+//
+// ```
+// use graph::GraphNauty;
+// use graph::nauty::automorphism_group;
+// let g = GraphNauty::parse_graph6("C^"); // C_4
+// let automorphisms = automorphism_group(&g);
+// let expected_auts: Vec<Vec<u8>> = vec![
+//     vec![0, 1, 2, 3],
+//     vec![1, 0, 2, 3],
+//     vec![0, 1, 3, 2],
+//     vec![1, 0, 3, 2],
+// ];
+// assert!(automorphisms == expected_auts);
+// ```
+pub fn automorphism_group(g: &GraphNauty) -> Vec<Vec<u8>> {
+    if g.order() > 255 {
+        panic!("Graph order must be <= 255");
+    }
+
+    let n = g.order();
+    let m = g.w;
+    let mut orbits = vec![0i32; n as usize];
+    let (mut lab, mut ptn) = init_fixed(n, &[]);
+
+    let mut automorphisms: Vec<Vec<u8>> = vec![];
+    extern "C" fn action(
+        p: *mut int,
+        length: int,
+        _abort: *mut int,
+        ptr: *mut libc::c_void,
+    ) {        
+        let auts = ptr as *mut Vec<Vec<u8>>;
+        let mut aut = vec![0u8; length as usize];
+        unsafe {
+            for i in 0..length {
+                aut[i as usize] = *p.offset(i as isize) as u8;
+            }
+            (*auts).push(aut);
+        }
+    }
+
+    unsafe {
+        allgroup_wrapper(
+            n,
+            m,
+            g.data.as_ptr(),
+            lab.as_mut_slice().as_mut_ptr(),
+            ptn.as_mut_slice().as_mut_ptr(),
+            orbits.as_mut_slice().as_mut_ptr(),
+            action,
+            &mut automorphisms as *mut Vec<Vec<u8>> as *mut libc::c_void,
+        );
+    }
+
+    automorphisms
+}
+
 #[test]
 fn test_orbits_sample() {
     let orbits = vec![0, 1, 2, 3, 3];
@@ -312,5 +382,49 @@ fn test_transfo_canon() {
                 }
             }
         }
+    }
+}
+
+#[test]
+fn test_automorphism_group() {
+    let g = GraphNauty::parse_graph6("E@NW");
+    let automorphisms = automorphism_group(&g);
+    let expected_auts: Vec<Vec<u8>> = vec![
+        vec![0, 1, 2, 3, 4, 5],
+        vec![1, 0, 2, 3, 4, 5],
+        vec![0, 1, 2, 4, 3, 5],
+        vec![1, 0, 2, 4, 3, 5],
+    ];
+    assert!(automorphisms.len() == expected_auts.len());
+    for aut in automorphisms {
+        assert!(expected_auts.contains(&aut));
+    }
+
+    let g = GraphNauty::parse_graph6("D@{");
+    let automorphisms = automorphism_group(&g);
+    let expected_auts: Vec<Vec<u8>> = vec![
+        vec![1, 0, 3, 2, 4],
+        vec![0, 1, 2, 3, 4],
+        vec![0, 1, 3, 2, 4],
+        vec![1, 0, 2, 3, 4],
+    ];
+    assert!(automorphisms.len() == expected_auts.len());
+    for aut in automorphisms {
+        assert!(expected_auts.contains(&aut));
+    }
+
+    let g = GraphNauty::parse_graph6("Bw");
+    let automorphisms = automorphism_group(&g);
+    let expected_auts: Vec<Vec<u8>> = vec![
+        vec![0, 2, 1],
+        vec![1, 2, 0],
+        vec![2, 1, 0],
+        vec![2, 0, 1],
+        vec![0, 1, 2],
+        vec![1, 0, 2],
+    ];
+    assert!(automorphisms.len() == expected_auts.len());
+    for aut in automorphisms {
+        assert!(expected_auts.contains(&aut));
     }
 }
