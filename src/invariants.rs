@@ -925,3 +925,80 @@ pub fn avg_indep_size<G>(g: &G) -> f64
     );
     return (total_cliques_size as f64) / (nb_cliques as f64);
 }
+
+pub mod num_non_autoeq_col_utils {
+    use crate::GraphIter;
+    use dlx_rs::Solver;
+    use std::collections::HashMap;
+
+    // Computes all colorings of a graph. all_graph_colorings(...)[i] is the vector of all i-colorings of the graph.
+    //
+    // This method casts the graph coloring problem into an exact cover problem. More details on
+    // https://doc.sagemath.org/html/en/reference/graphs/sage/graphs/graph_coloring.html#sage.graphs.graph_coloring.all_graph_colorings
+    pub fn all_graph_colorings<G>(g: &G) -> Vec<Vec<Vec<u64>>>
+        where G: for<'b> GraphIter<'b>
+    {
+        let n = g.order() as usize;
+        let m = g.size() as usize;
+        let mut solver = Solver::new(n + n*m);
+
+        // Maps exact cover matrix row to vertex and color
+        let mut colormap: HashMap<String, (u64, u64)> = HashMap::new();
+
+        for u in g.vertices() {
+            for c in 0..n {
+                let r_name = format!("{}-{}", u, c);
+                colormap.insert(r_name.clone(), (u, c as u64));
+
+                let mut indexes = vec![(u as usize) + 1];
+
+                let mut index = n;
+                // Consider every color for every edge
+                for (x, y) in g.edges() {
+                    for d in 0..n {
+                        // If the edge xy has has u as an extremity and y is colored with d, then add 1 to the matrix
+                        if (x == u || y == u) && d == c {
+                            indexes.push(index + 1);
+                        }
+                        index += 1;
+                    }
+                }
+
+                solver.add_option(r_name.as_str(), indexes.as_slice());
+            }
+        }
+
+        if n > 2 {
+            for i in 0..n*m {
+                solver.add_option(format!("r{}", n*n + i).as_str(), vec![n + i + 1].as_slice());
+            }
+        }
+
+        let mut colorings: Vec<Vec<Vec<u64>>> = vec![vec![]; n];
+
+        for sol in solver {
+            let mut used_colors: Vec<u64> = vec![];
+            let mut coloring: Vec<u64> = vec![0; n];
+            for row in sol {
+                if !row.starts_with("r") && colormap.contains_key(&row) {
+                    let (u, c) = colormap.get(&row).unwrap();
+                    if !used_colors.contains(c) {
+                        used_colors.push(*c);
+                    }
+                    coloring[*u as usize] = *c;
+                }
+            }
+            
+            // Update coloring to be 0..k for some k
+            used_colors.sort();
+            coloring = coloring.iter().map(|c| used_colors.iter().position(|&x| x == *c).unwrap() as u64).collect();
+
+            let n_colors = used_colors.len() - 1;
+            if !colorings[n_colors].iter().any(|c| c == &coloring) {
+                colorings[n_colors].push(coloring);
+            }
+        }
+
+        colorings
+    }
+}
