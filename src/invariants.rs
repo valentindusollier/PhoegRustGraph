@@ -925,3 +925,18 @@ pub fn avg_indep_size<G>(g: &G) -> f64
     );
     return (total_cliques_size as f64) / (nb_cliques as f64);
 }
+
+pub fn chromatic_polynomial<G>(g: &mut G, k: u64) -> u64
+    where G: for<'b> GraphIter<'b> + crate::GraphConstructible + Clone
+{
+    let n = g.order();
+    if g.size() == 0 {
+        return k.pow(n as u32);
+    }
+
+    let (u, v) = g.edges().next().unwrap(); // panic iff g is empty
+    let mut h = g.clone();
+    h.remove_edge(u, v);
+
+    chromatic_polynomial(&mut h, k) - chromatic_polynomial(&mut g.contract(u, v), k)
+}
