@@ -2,6 +2,8 @@
 
 use crate::Graph;
 use crate::GraphIter;
+use crate::GraphConstructible;
+use crate::GraphIso;
 use crate::algorithm::{bfs, dfs, Visitor, cliques};
 use crate::errors::*;
 use std::f64;
@@ -926,8 +928,25 @@ pub fn avg_indep_size<G>(g: &G) -> f64
     return (total_cliques_size as f64) / (nb_cliques as f64);
 }
 
-pub fn chromatic_polynomial<G>(g: &mut G, k: u64) -> u64
-    where G: for<'b> GraphIter<'b> + crate::GraphConstructible + Clone
+// Computes the chromatic polynomial of a graph G evaluated at k.
+///
+/// # Examples
+/// ```
+/// use graph::{Graph,GraphNauty};
+/// use graph::invariants::chromatic_polynomial;
+/// use graph::format::from_g6;
+///
+/// let mut g: GraphNauty = from_g6(&"HoCOPHA".to_string()).unwrap();
+/// assert!(chromatic_polynomial(&g, 3) == 510);
+///
+/// g = from_g6(&"DDW".to_string()).unwrap();
+/// assert!(chromatic_polynomial(&g, 5) == 1280);
+///
+/// g = from_g6(&"D??".to_string()).unwrap();
+/// assert!(chromatic_polynomial(&g, 5) == 3125);
+/// ```
+pub fn chromatic_polynomial<G>(g: &G, k: u64) -> u64
+    where G: for<'b> GraphIter<'b> + GraphConstructible + Clone
 {
     let n = g.order();
     if g.size() == 0 {
@@ -938,5 +957,99 @@ pub fn chromatic_polynomial<G>(g: &mut G, k: u64) -> u64
     let mut h = g.clone();
     h.remove_edge(u, v);
 
-    chromatic_polynomial(&mut h, k) - chromatic_polynomial(&mut g.contract(u, v), k)
+    chromatic_polynomial(&h, k) - chromatic_polynomial(&g.contract(u, v), k)
+}
+
+// Computes the cycles decomposition of a permutation.
+///
+/// # Examples
+/// ```
+/// use graph::invariants::cycles;
+///
+/// assert!(cycles(&vec![6, 5, 4, 3, 2, 1, 0]) == vec![vec![0, 6], vec![1, 5], vec![2, 4], vec![3]]);
+/// assert!(cycles(&vec![3, 2, 1, 5, 4, 0]) == vec![vec![0, 3, 5], vec![4], vec![1, 2]]);
+/// assert!(cycles(&vec![2, 3, 4, 6, 5, 0, 1]) == vec![vec![1, 3, 6], vec![0, 2, 4, 5]]);
+/// ```
+pub fn cycles(sigma: &Vec<u64>) -> Vec<Vec<u64>>
+{
+    let mut remain = sigma.clone();
+    let mut result: Vec<Vec<u64>> = Vec::new();
+    while remain.len() > 0 {
+        let mut cycle: Vec<u64> = Vec::new();
+        let n0 = remain.pop().unwrap();
+        cycle.push(n0);
+        let mut n = n0;
+        loop {
+            n = sigma[n as usize];
+            if n == n0 {
+                break;
+            }
+            remain.retain(|&x| x != n);
+            cycle.push(n);
+        }
+        result.push(cycle);
+    }
+    result
+}
+
+// Computes the orbital chromatic polynomial of a graph G evaluated at k.
+///
+/// # Examples
+/// ```
+/// use graph::{Graph,GraphNauty};
+/// use graph::invariants::orbital_chromatic_polynomial;
+/// use graph::format::from_g6;
+///
+/// let mut g: GraphNauty = from_g6(&"HoCOPHA".to_string()).unwrap();
+/// assert!(orbital_chromatic_polynomial(&g, 3) == 54);
+///
+/// g = from_g6(&"DDW".to_string()).unwrap();
+/// assert!(orbital_chromatic_polynomial(&g, 5) == 680);
+///
+/// g = from_g6(&"D??".to_string()).unwrap();
+/// assert!(orbital_chromatic_polynomial(&g, 5) == 126);
+/// ```
+pub fn orbital_chromatic_polynomial<G>(g: &G, k: u64) -> u64
+    where G: for<'b> GraphIter<'b> + GraphIso + GraphConstructible + Clone
+{
+    let automorphisms = g.automorphism_group();
+    let order = automorphisms.len() as u64;
+    let mut res = 0;
+
+    for sigma in automorphisms {
+        let cycles = cycles(&sigma.iter().map(|x| *x as u64).collect());
+        let mut h = g.clone();
+        let mut edges_to_contract = cycles
+            .iter()
+            .map(|cycle| {
+                cycle
+                    .iter()
+                    .filter_map(|vertex| {
+                        if cycle[0] != *vertex {
+                            Some((cycle[0], *vertex))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<(u64, u64)>>()
+            })
+            .fold(vec![], |acc, edges_to_contract| {
+                [&acc[..], &edges_to_contract[..]].concat()
+            });
+        let mut i = 0;
+        while i < edges_to_contract.len() {
+            let (u, v) = edges_to_contract[i];
+            h = h.contract(u, v);
+            for j in (i + 1)..edges_to_contract.len() {
+                let (x0, y0) = edges_to_contract[j];
+                let x = if x0 >= v { x0 - 1 } else { x0 };
+                let y = if y0 >= v { y0 - 1 } else { y0 };
+                edges_to_contract[j] = (x, y);
+            }
+            i += 1;
+        }
+        res += chromatic_polynomial(&h, k);
+    }
+
+    res / order
 }

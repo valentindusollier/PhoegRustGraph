@@ -734,9 +734,13 @@ pub trait GraphConstructible: Graph {
     /// ```
     fn contract(&self, u: u64, v: u64) -> Self {
         //TODO check u and v ok and maybe panic ?
-        let mut res = Self::new(self.order() - 1);
+        let n = self.order();
+        if u  >= n || v >= n {
+            panic!("The edge ({},{}) can't exist in a graph of order {}", u, v, n);
+        }
+        let mut res = Self::new(n - 1);
         let (u, v) = (std::cmp::min(u, v), std::cmp::max(u, v));
-        for i in 1..self.order() {
+        for i in 1..n {
             for j in 0..i {
                 if (j != u || i != v) && self.is_edge(i, j) {
                     let i = if i > v {
@@ -782,6 +786,7 @@ pub trait GraphIso: Graph {
         self.canon_fixed(&[])
     }
     fn orbits(&self, fixed: &[Vec<u64>]) -> Vec<u64>;
+    fn automorphism_group(&self) -> Vec<Vec<u8>>;
 }
 
 /// Structure representing a undirected simple graph.
@@ -1596,6 +1601,9 @@ impl GraphIso for GraphNauty {
     }
     fn orbits(&self, fixed: &[Vec<u64>]) -> Vec<u64> {
         nauty::orbits(self, fixed)
+    }
+    fn automorphism_group(&self) -> Vec<Vec<u8>> {
+        nauty::automorphism_group(self)
     }
 }
 
