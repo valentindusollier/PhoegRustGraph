@@ -928,6 +928,22 @@ pub fn avg_indep_size<G>(g: &G) -> f64
     return (total_cliques_size as f64) / (nb_cliques as f64);
 }
 
+// Take a graph g, a function base_case taking a u64 n and returning a u64
+fn deletion_contraction<G>(g: &G, base_case: &impl Fn(u64) -> u64) -> u64
+    where G: for<'b> GraphIter<'b> + GraphConstructible + Clone
+{
+    let n = g.order();
+    if g.size() == (n * (n - 1)) / 2 {
+        return base_case(n);
+    }
+
+    let (u, v) = g.complement().edges().next().unwrap(); // panic iff g is complete
+    let mut h = g.clone();
+    h.add_edge(u, v);
+
+    deletion_contraction(&h, base_case) + deletion_contraction(&g.contract(u, v), base_case)
+}
+
 // Computes the chromatic polynomial of a graph G evaluated at k.
 ///
 /// # Examples
@@ -948,16 +964,30 @@ pub fn avg_indep_size<G>(g: &G) -> f64
 pub fn chromatic_polynomial<G>(g: &G, k: u64) -> u64
     where G: for<'b> GraphIter<'b> + GraphConstructible + Clone
 {
-    let n = g.order();
-    if g.size() == 0 {
-        return k.pow(n as u32);
-    }
+    deletion_contraction(g, &|n| if k < n { 0 } else { (0..n).map(|x| k - x).product() })
+}
 
-    let (u, v) = g.edges().next().unwrap(); // panic iff g is empty
-    let mut h = g.clone();
-    h.remove_edge(u, v);
-
-    chromatic_polynomial(&h, k) - chromatic_polynomial(&g.contract(u, v), k)
+// Computes the number of proper colorings of a graph G using k colors.
+///
+/// # Examples
+/// ```
+/// use graph::{Graph,GraphNauty};
+/// use graph::invariants::num_proper_colorings;
+/// use graph::format::from_g6;
+///
+/// let mut g: GraphNauty = from_g6(&"HoCOPHA".to_string()).unwrap();
+/// assert!(num_proper_colorings(&g, 3) == 510);
+///
+/// g = from_g6(&"DDW".to_string()).unwrap();
+/// assert!(num_proper_colorings(&g, 4) == 144);
+///
+/// g = from_g6(&"D??".to_string()).unwrap();
+/// assert!(num_proper_colorings(&g, 4) == 240);
+/// ```
+pub fn num_proper_colorings<G>(g: &G, k: u64) -> u64
+    where G: for<'b> GraphIter<'b> + GraphConstructible + Clone
+{
+    deletion_contraction(g, &|n| if k == n { (1..=n).product() } else { 0 })
 }
 
 // Computes the cycles decomposition of a permutation.
