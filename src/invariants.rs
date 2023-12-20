@@ -1022,24 +1022,7 @@ pub fn cycles(sigma: &Vec<u64>) -> Vec<Vec<u64>>
     result
 }
 
-// Computes the orbital chromatic polynomial of a graph G evaluated at k.
-///
-/// # Examples
-/// ```
-/// use graph::{Graph,GraphNauty};
-/// use graph::invariants::orbital_chromatic_polynomial;
-/// use graph::format::from_g6;
-///
-/// let mut g: GraphNauty = from_g6(&"HoCOPHA".to_string()).unwrap();
-/// assert!(orbital_chromatic_polynomial(&g, 3) == 54);
-///
-/// g = from_g6(&"DDW".to_string()).unwrap();
-/// assert!(orbital_chromatic_polynomial(&g, 5) == 680);
-///
-/// g = from_g6(&"D??".to_string()).unwrap();
-/// assert!(orbital_chromatic_polynomial(&g, 5) == 126);
-/// ```
-pub fn orbital_chromatic_polynomial<G>(g: &G, k: u64) -> u64
+pub fn burnside<G>(g: &G, fix_size: &impl Fn(&G) -> u64) -> u64
     where G: for<'b> GraphIter<'b> + GraphIso + GraphConstructible + Clone
 {
     let automorphisms = g.automorphism_group();
@@ -1048,6 +1031,19 @@ pub fn orbital_chromatic_polynomial<G>(g: &G, k: u64) -> u64
 
     for sigma in automorphisms {
         let cycles = cycles(&sigma.iter().map(|x| *x as u64).collect());
+        if 'is_degenerated: {
+            for cycle in cycles.iter() {
+                let u = cycle[0];
+                for v in cycle.iter().skip(1) {
+                    if g.is_edge(u, *v) {
+                        break 'is_degenerated true;
+                    }
+                }
+            }
+            false
+        }{
+            continue;
+        }
         let mut h = g.clone();
         let mut edges_to_contract = cycles
             .iter()
@@ -1078,8 +1074,53 @@ pub fn orbital_chromatic_polynomial<G>(g: &G, k: u64) -> u64
             }
             i += 1;
         }
-        res += chromatic_polynomial(&h, k);
+        res += fix_size(&h);
     }
-
     res / order
+}
+
+// Computes the orbital chromatic polynomial of a graph G evaluated at k.
+///
+/// # Examples
+/// ```
+/// use graph::{Graph,GraphNauty};
+/// use graph::invariants::orbital_chromatic_polynomial;
+/// use graph::format::from_g6;
+///
+/// let mut g: GraphNauty = from_g6(&"HoCOPHA".to_string()).unwrap();
+/// assert!(orbital_chromatic_polynomial(&g, 3) == 29);
+///
+/// g = from_g6(&"DDW".to_string()).unwrap();
+/// assert!(orbital_chromatic_polynomial(&g, 5) == 680);
+///
+/// g = from_g6(&"D??".to_string()).unwrap();
+/// assert!(orbital_chromatic_polynomial(&g, 5) == 126);
+/// ```
+pub fn orbital_chromatic_polynomial<G>(g: &G, k: u64) -> u64
+    where G: for<'b> GraphIter<'b> + GraphIso + GraphConstructible + Clone
+{
+    burnside(g, &|h| chromatic_polynomial(h, k))
+}
+
+// Computes the number of non symmetric colorings of a graph G using k colors.
+///
+/// # Examples
+/// ```
+/// use graph::{Graph,GraphNauty};
+/// use graph::invariants::num_non_symmetric_colorings;
+/// use graph::format::from_g6;
+///
+/// let mut g: GraphNauty = from_g6(&"GsaCC?".to_string()).unwrap();
+/// assert!(num_non_symmetric_colorings(&g, 5) == 100);
+///
+/// g = from_g6(&"DDW".to_string()).unwrap();
+/// assert!(num_non_symmetric_colorings(&g, 5) == 60);
+///
+/// g = from_g6(&"D??".to_string()).unwrap();
+/// assert!(num_non_symmetric_colorings(&g, 5) == 1);
+/// ```
+pub fn num_non_symmetric_colorings<G>(g: &G, k: u64) -> u64
+    where G: for<'b> GraphIter<'b> + GraphIso + GraphConstructible + Clone
+{
+    burnside(g, &|h| num_proper_colorings(h, k))
 }
