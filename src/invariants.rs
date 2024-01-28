@@ -950,16 +950,10 @@ pub fn ag<G>(g: &G) -> f64
     where G: for<'b> GraphIter<'b>
 {
     let mut sum = 0f64;
-    let mut verts = g.vertices();
-    while let Some(x) = verts.next() {
-        let mut verts2 = verts.clone();
-        while let Some(y) = verts2.next() {
-            if g.is_edge(x,y) {
-                let dx = g.neighbors(x).count() as f64;
-                let dy = g.neighbors(y).count() as f64;
-                sum += (dx + dy) / (2f64 * (dx * dy).sqrt());
-            }
-        }
+    for (u, v) in g.edges() {
+        let du = g.neighbors(u).count() as f64;
+        let dv = g.neighbors(v).count() as f64;
+        sum += (du + dv) / (2f64 * (du * dv).sqrt());
     }
     sum
 }
