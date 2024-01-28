@@ -925,3 +925,41 @@ pub fn avg_indep_size<G>(g: &G) -> f64
     );
     return (total_cliques_size as f64) / (nb_cliques as f64);
 }
+
+// Computes the Arithmetic Geometric Index of a graph. This invariant is defined as the sum for
+// all edges uv of
+//          (du + dv) / (2 * sqrt(du * dv))
+// where du and dv are the degrees of u and v respectively.
+//
+/// # Examples
+/// ```
+/// use graph::{Graph,GraphNauty};
+/// use graph::invariants::ag;
+/// use graph::format::from_g6;
+/// 
+/// let mut g: GraphNauty = from_g6(&"H?bERjE".to_string()).unwrap();
+/// assert!(ag(&g) == 14.621320343559642f64);
+/// 
+/// g = from_g6(&"GCrRug".to_string()).unwrap();
+/// assert!(ag(&g) == 14.281088913245535f64);
+/// 
+/// g = from_g6(&"I?`bnbWl?".to_string()).unwrap();
+/// assert!(ag(&g) == 19.121320343559645f64);
+/// ```
+pub fn ag<G>(g: &G) -> f64
+    where G: for<'b> GraphIter<'b>
+{
+    let mut sum = 0f64;
+    let mut verts = g.vertices();
+    while let Some(x) = verts.next() {
+        let mut verts2 = verts.clone();
+        while let Some(y) = verts2.next() {
+            if g.is_edge(x,y) {
+                let dx = g.neighbors(x).count() as f64;
+                let dy = g.neighbors(y).count() as f64;
+                sum += (dx + dy) / (2f64 * (dx * dy).sqrt());
+            }
+        }
+    }
+    sum
+}
